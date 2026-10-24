@@ -10,3 +10,6 @@ out/
 # Superseded first-attempt stacks (kept locally, not part of the submission)
 backend/
 frontend/
+
+# Pitching / presentation notes — kept local, never pushed
+pitch/
