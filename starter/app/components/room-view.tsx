@@ -45,7 +45,10 @@ export function RoomView({ initial, error }: { initial: RoomPayload | null; erro
 
   return <>
     <header className="room-head">
-      <h1>To decide</h1>
+      <div className="room-head-top">
+        <h1>To decide</h1>
+        <Link className="room-textlink" href="/">New here? How this works →</Link>
+      </div>
       <p>{error
         ? "The queue could not be loaded."
         : needing === 0

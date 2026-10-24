@@ -5,8 +5,9 @@ decision that needs them. Built for Bahn's Prompt Operations Hackathon, 24–25
 October 2026, on Bahn's own starter and the real fictional snapshot
 (`2026-10-21T09:00:00Z`, 100 orders).
 
-> Open **http://localhost:3000/room** — "To decide". The lane board (how people
-> work today) is still at `/`.
+> The home page `/` is a short **onboarding** of how the room works; **`/room`**
+> ("To decide") is the control room itself. The lane board (how people work today)
+> moved to `/board`, and `/drive` shows the driver's phone.
 
 ## What it does
 

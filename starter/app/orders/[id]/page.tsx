@@ -24,8 +24,8 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   }, [detail])
 
   return <AppFrame section="board" snapshotAt={detail?.view.snapshotAt ?? null}><main className="page">
-    <nav className="crumbs" aria-label="Breadcrumb"><Link href="/">Orders</Link><span>/</span><span>{detail?.view.header.reference ?? "Record"}</span></nav>
-    {error && <div className="record-state" role="alert"><h1>{error}</h1><p>The record could not be opened. <Link href="/">Back to orders</Link></p></div>}
+    <nav className="crumbs" aria-label="Breadcrumb"><Link href="/board">Orders</Link><span>/</span><span>{detail?.view.header.reference ?? "Record"}</span></nav>
+    {error && <div className="record-state" role="alert"><h1>{error}</h1><p>The record could not be opened. <Link href="/board">Back to orders</Link></p></div>}
     {!error && !detail && <div className="record-state" aria-busy="true"><div className="cover skeleton-cover" /><p>Loading order…</p></div>}
     {detail && <OrderPane detail={detail} />}
   </main></AppFrame>

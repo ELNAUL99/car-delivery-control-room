@@ -3,12 +3,13 @@ import type { ReactNode } from "react"
 import { fmtDateTime } from "@/lib/present/time"
 import { Icon } from "./icons"
 
-export type Section = "room" | "board" | "inbox" | "customers" | "drivers" | "sites"
+export type Section = "room" | "board" | "inbox" | "customers" | "drivers" | "sites" | "welcome"
 
 const GROUPS: { label: string; links: { section: Section; href: string; label: string; icon: string }[] }[] = [
   { label: "Work", links: [
+    { section: "welcome", href: "/", label: "Overview", icon: "bot" },
     { section: "room", href: "/room", label: "To decide", icon: "flag" },
-    { section: "board", href: "/", label: "Orders", icon: "car" },
+    { section: "board", href: "/board", label: "Orders", icon: "car" },
     { section: "inbox", href: "/inbox", label: "Inbox", icon: "inbox" },
   ] },
   { label: "People and places", links: [

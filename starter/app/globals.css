@@ -561,3 +561,39 @@ details.more > :not(summary) { margin-top: 8px; }
 .drive-pending { display: grid; gap: 6px; padding: 12px; border-radius: 14px; background: var(--orange-bg); }
 .drive-pending .drive-who, .drive-pending .drive-time { color: var(--orange-ink); }
 .drive-pending .drive-body { color: var(--ink); }
+
+/* ── Onboarding (/welcome) ─────────────────────────────────────────────── */
+.room-head-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.onboard-hero { margin-top: 10px; }
+.onboard-hero .page-title { margin-top: 14px; max-width: 20ch; }
+.onboard-lead { margin-top: 16px; font-size: 16px; line-height: 1.55; color: var(--muted); max-width: 62ch; }
+.onboard-cta { margin-top: 22px; display: flex; gap: 10px; flex-wrap: wrap; }
+.onboard-cta .room-btn, .onboard-foot .room-btn { height: 38px; display: inline-flex; align-items: center; text-decoration: none; }
+.onboard-block { margin-top: 48px; }
+.onboard-h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(20px, 2.4vw, 26px); letter-spacing: -0.02em; }
+.onboard-sub { margin-top: 8px; color: var(--muted); max-width: 64ch; }
+.onboard-steps { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+.onboard-step { padding: 18px; border-radius: var(--radius-lg); background: var(--tray); box-shadow: var(--shadow-card); }
+.onboard-step-mark { display: inline-flex; align-items: center; gap: 9px; color: var(--teal-ink); }
+.onboard-step-num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--teal-bg); color: var(--teal-ink); font-size: 12px; font-weight: 600; }
+.onboard-step h3 { margin-top: 12px; font-size: 15px; font-weight: 600; }
+.onboard-step p { margin-top: 7px; color: var(--muted); }
+.onboard-anatomy { margin-top: 16px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); background: var(--birch); }
+.onboard-anatomy-row { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 18px; padding: 14px 16px; border-top: 1px solid var(--hair-soft); }
+.onboard-anatomy-row:first-child { border-top: 0; }
+.onboard-anatomy dt { font-weight: 600; }
+.onboard-anatomy dd { color: var(--muted); }
+.onboard-areas { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+.onboard-area { padding: 18px; border-radius: var(--radius-lg); background: var(--birch); box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 9px; }
+.onboard-area-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.onboard-tag { font-size: 11px; font-weight: 500; color: var(--teal-ink); background: var(--teal-bg); padding: 2px 8px; border-radius: 999px; }
+.onboard-area h3 { font-family: var(--font-display); font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+.onboard-area-decision { color: var(--brown); }
+.onboard-area-rule { font-size: 13px; color: var(--muted); display: flex; gap: 7px; align-items: flex-start; }
+.onboard-area-rule .icon { color: var(--green-ink); margin-top: 2px; flex: none; }
+.onboard-area-eg { margin-top: auto; padding-top: 4px; font-size: 12px; color: var(--subtle); }
+.onboard-rules { margin-top: 16px; display: grid; gap: 11px; max-width: 78ch; }
+.onboard-rules li { display: flex; gap: 10px; align-items: flex-start; color: var(--brown); }
+.onboard-rules .icon { color: var(--green-ink); margin-top: 3px; flex: none; }
+.onboard-foot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.onboard-foot p { font-size: 12px; color: var(--subtle); }
