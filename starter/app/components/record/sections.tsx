@@ -190,6 +190,7 @@ function ProposalRow({ proposal }: { proposal: ProposalView }) {
         {proposal.review && <> · {proposal.review.decisionLabel.toLowerCase()} by {proposal.review.reviewer.name}</>}
         {proposal.execution && <> · execution {proposal.execution.statusLabel.toLowerCase()}{proposal.execution.effects ? `, ${proposal.execution.effects} event${proposal.execution.effects === 1 ? "" : "s"} committed` : ", nothing committed"}</>}
       </div>
+      {proposal.rationale && <p className="row-preview">{proposal.rationale}</p>}
     </div>
     <div className="row-side"><When at={proposal.createdAt} withZone={false} /></div>
   </article>

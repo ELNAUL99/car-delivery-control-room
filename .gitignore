@@ -6,3 +6,7 @@ out/
 .env.*
 !.env.example
 .DS_Store
+
+# Superseded first-attempt stacks (kept locally, not part of the submission)
+backend/
+frontend/

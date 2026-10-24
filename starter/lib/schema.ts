@@ -108,6 +108,16 @@ export const alerts = pgTable("alerts", {
   details: jsonb("details").$type<Record<string, unknown>>().notNull(),
 }, (table) => [index("alerts_order_idx").on(table.orderId)])
 
+// Decisions and agent looks made in this control room. No foreign key: reseeding
+// the snapshot truncates the dataset tables and must not depend on this one.
+export const roomActivity = pgTable("room_activity", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  kind: text("kind").notNull(),
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull(),
+}, (table) => [index("room_activity_order_idx").on(table.orderId, table.kind)])
+
 export const operationalEvents = pgTable("operational_events", {
   id: text("id").primaryKey(),
   orderId: text("order_id").notNull().references(() => orders.id),

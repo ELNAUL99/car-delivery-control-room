@@ -19,7 +19,9 @@ npm run attachments:seed
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000/room for the decision queue. The lane board remains at http://localhost:3000.
+
+Set `MISTRAL_API_KEY` in `.env` before `npm run dev` to let **Look again with the agent** call a model. Without it, `/room` still shows the Bentley case from the records. Decisions are stored in `room_activity` and appear on the order under Prior agent work. Reseeding the snapshot does not delete them.
 
 The Compose file uses three ports on this computer: 5438 for Postgres, 9009 and 9010 for the attachment store. If one of them is already in use, change it in `compose.yaml` and update `DATABASE_URL` or `S3_ENDPOINT` in `.env` to match.
 
