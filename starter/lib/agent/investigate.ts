@@ -3,8 +3,9 @@
 // that would move the car is refused before it can be approved.
 
 import { driverDraftProblem } from "@/lib/agent/guard"
+import { followUp, spokenReply } from "@/lib/agent/talk"
 import { applyAgentDrafts, buildOnTheRoadCard, knownRecordIds, roadSlices } from "@/lib/room/on-the-road"
-import type { AgentTrace, Investigation } from "@/lib/room/types"
+import type { AgentTrace, AgentTurn, Investigation } from "@/lib/room/types"
 import type { Bundle } from "@/lib/present/bundle"
 
 type ToolCall = { id?: string; type?: string; function?: { name?: string; arguments?: unknown } }
@@ -42,6 +43,7 @@ const TOOLS = [
       driverDraft: { type: "string", description: "Exact driver-chat text. Place and dashboard photo only. Car stays stopped." },
       callScript: { type: "string", description: "What the person can say to the customer on a call. Not an email." },
       promiseNote: { type: "string", description: "Why the delivery promise stays as recorded. No new time." },
+      say: { type: "string", description: "One or two sentences back to the person at the desk. If they asked you to contact a customer, refuse. If they asked you to reach the driver, say the draft waits for their approval." },
     },
     required: ["summary", "driverDraft", "callScript", "promiseNote"],
   }),
@@ -63,7 +65,7 @@ function textOf(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
-export async function investigateOrder(bundle: Bundle): Promise<Investigation> {
+export async function investigateOrder(bundle: Bundle, note?: string, history?: AgentTurn[]): Promise<Investigation> {
   const base = buildOnTheRoadCard(bundle)
   const slices = roadSlices(bundle)
   if (!base || !slices) {
@@ -83,7 +85,7 @@ export async function investigateOrder(bundle: Bundle): Promise<Investigation> {
   const model = process.env.MISTRAL_MODEL?.trim() || "ministral-8b-2512"
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM },
-    { role: "user", content: `Order ${slices.orderId} (${slices.reference}). Look it up with the tools, then submit_decision. Do not answer in prose.` },
+    { role: "user", content: followUp(`Order ${slices.orderId} (${slices.reference}). Look it up with the tools, then submit_decision. Do not answer in prose.`, note, history) },
   ]
   let refusedDraft: string | null = null
   let rewrites = 0
@@ -121,7 +123,7 @@ export async function investigateOrder(bundle: Bundle): Promise<Investigation> {
         })
         if (applied.refusedDraft) refusedDraft = applied.refusedDraft
         trace.push({ tool: "submit_decision", summary: applied.card.source === "agent" ? "Decision accepted. Cited facts stayed on the card." : "Decision kept the record reading." })
-        finished = { ok: applied.card.source === "agent" || !problem, error: problem && applied.card.source !== "agent" ? problem : null, card: applied.card, trace, refusedDraft }
+        finished = { ok: applied.card.source === "agent" || !problem, error: problem && applied.card.source !== "agent" ? problem : null, card: applied.card, trace, refusedDraft, reply: note ? spokenReply(note, input.say) : null }
         reply({ accepted: true })
         return
       }

@@ -1,6 +1,6 @@
 // What the driver can see. Driver chat only. Internal notes and the customer
-// email stay on the desk. An approved driver message is shown apart from the
-// thread, because approving it does not put it on his phone.
+// email stay on the desk. An approved driver message is the message for him.
+// It is recorded in this room and is not written into the snapshot.
 
 import { decisionsFor } from "@/lib/agent/session"
 import { str } from "@/lib/present/bundle"

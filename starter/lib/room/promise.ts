@@ -11,7 +11,7 @@ import { label } from "@/lib/present/labels"
 import { fmtDateTime, fmtRange, relativeTo } from "@/lib/present/time"
 import { EMPTY_PARAMETERS, fn, runAgent, textOf } from "@/lib/agent/run-agent"
 import { fact, placeLabel, primaryVehicle } from "./cite"
-import type { CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
+import type { AgentTurn, CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
 
 type Slice = Record<string, unknown>
 
@@ -19,6 +19,14 @@ const PROMISE_SIGNAL = /DELIVERY_PROMISE_UNACHIEVABLE|PROMISE_AT_RISK/
 
 export function isOpenPromiseCase(bundle: Bundle): boolean {
   return bundle.alerts.some((a) => (a.status === "OPEN" || a.status === "ACKNOWLEDGED") && PROMISE_SIGNAL.test(a.signal))
+}
+
+export function promiseHalt(bundle: Bundle): string | null {
+  if (!isOpenPromiseCase(bundle)) return null
+  if (bundle.events.some((event) => event.command === "vehicle.delivered")) {
+    return "Agent stopped. A delivery is already recorded, so the model was not asked to write a new promise."
+  }
+  return null
 }
 
 type PromiseSlices = {
@@ -96,17 +104,17 @@ function cardFromSlices(slices: PromiseSlices, source: RoomCard["source"] = "rec
     if (typeof m.id !== "string" || typeof m.body !== "string") continue
     const channel = typeof m.channel === "string" ? label(m.channel) : "Message"
     const visibility = m.visibility === "INTERNAL" ? "internal" : null
-    facts.push(fact(`${m.author}: “${m.body}”`, [channel, visibility].filter(Boolean).join(" · "), m.id, "message", typeof m.at === "string" ? m.at : null))
+    facts.push(fact(`${m.author}: “${m.body}”`, [channel, visibility].filter(Boolean).join(" · "), m.id, "message", typeof m.at === "string" ? m.at : null, "reported"))
   }
-  if (slices.alert && typeof slices.alert.id === "string") facts.push(fact(`${label(String(slices.alert.signal))} is ${label(String(slices.alert.status))}. “${slices.alert.summary}”`, "Alert · promise", slices.alert.id, "alert", str(slices.alert.triggeredAt)))
+  if (slices.alert && typeof slices.alert.id === "string") facts.push(fact(`${label(String(slices.alert.signal))} is ${label(String(slices.alert.status))}. “${slices.alert.summary}”`, "Alert · promise", slices.alert.id, "alert", str(slices.alert.triggeredAt), "reported"))
   if (slices.promise && typeof slices.promise.id === "string") {
     const rel = relativeTo(str(slices.promise.end), slices.snapshotAt)
-    facts.push(fact(`Delivery promise ${fmtRange(str(slices.promise.start), str(slices.promise.end), str(slices.promise.zone))}, ${slices.promise.sourceLabel}.${rel ? ` It ends ${rel.text} at the snapshot.` : ""} It has not been replaced.`, "Time window", slices.promise.id, "window", str(slices.promise.end)))
+    facts.push(fact(`Delivery promise ${fmtRange(str(slices.promise.start), str(slices.promise.end), str(slices.promise.zone))}, ${slices.promise.sourceLabel}.${rel ? ` It ends ${rel.text} at the snapshot.` : ""} It has not been replaced.`, "Time window", slices.promise.id, "window", str(slices.promise.end), "recorded"))
   }
   if (slices.tracking) {
     const observed = fmtDateTime(str(slices.tracking.observedAt), slices.zone)
     const eta = fmtDateTime(str(slices.tracking.eta), slices.zone)
-    facts.push(fact(`Last driver-app position is ${label(String(slices.tracking.quality))}${observed ? ` at ${observed}` : ""}${typeof slices.tracking.remainingKm === "number" ? `, ${slices.tracking.remainingKm} km to go` : ""}${eta ? `, that observation's ETA ${eta}` : ""}. Read whether this is current or stale before acting.`, "Tracking", "tracking", "tracking", str(slices.tracking.observedAt)))
+    facts.push(fact(`Last driver-app position is ${label(String(slices.tracking.quality))}${observed ? ` at ${observed}` : ""}${typeof slices.tracking.remainingKm === "number" ? `, ${slices.tracking.remainingKm} km to go` : ""}${eta ? `, that observation's ETA ${eta}` : ""}. Read whether this is current or stale before acting.`, "Tracking", "tracking", "tracking", str(slices.tracking.observedAt), String(slices.tracking.quality).toUpperCase() === "STALE" ? "stale" : "reported"))
   }
 
   const missing = [
@@ -159,7 +167,7 @@ Rules:
 - Do not say the car is delivered. Do not contact the customer. customerScript is words a person may say; it is not an email.
 - Cite only what you read. Do not invent a release time, an ETA, or a new date.`
 
-function spec(slices: PromiseSlices) {
+function spec(slices: PromiseSlices, note?: string, history?: AgentTurn[]) {
   const base = cardFromSlices(slices)
   const tools = [
     fn("read_alert", "The promise alert and its summary.", EMPTY_PARAMETERS),
@@ -172,6 +180,7 @@ function spec(slices: PromiseSlices) {
         flagNote: { type: "string", description: "Why the original promise stays on the record, flagged, not overwritten." },
         revisedProposal: { type: "string", description: "The revised date to propose for approval. A proposal, not a new promise." },
         customerScript: { type: "string", description: "What a person can say to the customer to agree a revised date. Not an email you send." },
+        say: { type: "string", description: "One or two sentences back to the person. Refuse to contact the customer yourself. The call stays with them." },
       },
       required: ["summary", "flagNote", "revisedProposal", "customerScript"],
     }),
@@ -192,6 +201,8 @@ function spec(slices: PromiseSlices) {
     knownIds,
     toolPayload: payload,
     base,
+    note,
+    history,
     validate(input: Record<string, unknown>): string | null {
       return summaryProblem(textOf(input.summary))
     },
@@ -210,10 +221,10 @@ function spec(slices: PromiseSlices) {
   }
 }
 
-async function investigate(bundle: Bundle): Promise<Investigation> {
+async function investigate(bundle: Bundle, note?: string, history?: AgentTurn[]): Promise<Investigation> {
   const slices = promiseSlices(bundle)
   if (!slices) throw new Error("This agent only handles an at-risk delivery promise.")
-  return runAgent(spec(slices))
+  return runAgent(spec(slices, note, history))
 }
 
 export const promiseGuardianKind: CaseKind = {
@@ -224,6 +235,7 @@ export const promiseGuardianKind: CaseKind = {
   detect: isOpenPromiseCase,
   buildCard: buildPromiseCard,
   investigate,
+  halt: promiseHalt,
   actionIds: ["flag-hold", "propose-revised", "customer-call"],
   guardAction() {
     return null

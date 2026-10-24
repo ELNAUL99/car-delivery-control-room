@@ -3,7 +3,8 @@
 // reading; it cannot replace the cited facts. A draft that breaks an area's rule
 // is refused once before the model may try again.
 
-import type { AgentToolDef, AgentTrace, Investigation, RoomCard } from "@/lib/room/types"
+import type { AgentToolDef, AgentTrace, AgentTurn, Investigation, RoomCard } from "@/lib/room/types"
+import { followUp, spokenReply } from "./talk"
 
 type ToolCall = { id?: string; type?: string; function?: { name?: string; arguments?: unknown } }
 type ChatMessage =
@@ -32,6 +33,10 @@ export type AgentSpec = {
   finalize(input: Record<string, unknown>): { card: RoomCard; refusedDraft: string | null }
   /** The records-only card, used as the fallback and the base. */
   base: RoomCard
+  /** A follow-up the person typed. */
+  note?: string
+  /** Earlier turns, so the next reply continues the same conversation. */
+  history?: AgentTurn[]
 }
 
 export async function runAgent(spec: AgentSpec): Promise<Investigation> {
@@ -43,7 +48,7 @@ export async function runAgent(spec: AgentSpec): Promise<Investigation> {
   const model = process.env.MISTRAL_MODEL?.trim() || "ministral-8b-2512"
   const messages: ChatMessage[] = [
     { role: "system", content: spec.system },
-    { role: "user", content: spec.task },
+    { role: "user", content: followUp(spec.task, spec.note, spec.history) },
   ]
   let refusedDraft: string | null = null
   let rewrites = 0
@@ -74,7 +79,7 @@ export async function runAgent(spec: AgentSpec): Promise<Investigation> {
         const applied = spec.finalize(input)
         if (applied.refusedDraft) refusedDraft = applied.refusedDraft
         trace.push({ tool: name, summary: applied.card.source === "agent" ? "Decision accepted. Cited facts stayed on the card." : "Decision kept the record reading." })
-        finished = { ok: applied.card.source === "agent" || !problem, error: problem && applied.card.source !== "agent" ? problem : null, card: applied.card, trace, refusedDraft }
+        finished = { ok: applied.card.source === "agent" || !problem, error: problem && applied.card.source !== "agent" ? problem : null, card: applied.card, trace, refusedDraft, reply: spec.note ? spokenReply(spec.note, input.say) : null }
         reply({ accepted: true })
         return
       }

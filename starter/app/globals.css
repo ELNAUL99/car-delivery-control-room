@@ -526,6 +526,20 @@ details.more > :not(summary) { margin-top: 8px; }
 .room-draft:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
 .room-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .room-foot { margin-top: 8px; }
+.room-exec { margin: 8px 0 0; padding: 8px 10px; border-left: 3px solid var(--status-done, #2f6b4f); background: color-mix(in srgb, #2f6b4f 10%, transparent); font-size: 14px; }
+.room-exec.customer { border-left-color: #9a5b12; background: color-mix(in srgb, #9a5b12 10%, transparent); }
+.room-stopped { margin: 0 0 12px; padding: 8px 10px; border-left: 3px solid #9a5b12; background: color-mix(in srgb, #9a5b12 10%, transparent); }
+.fact-state { padding: 0 6px; border: 1px solid var(--line); border-radius: 99px; font-size: 11px; letter-spacing: .04em; }
+.fact-state.stale, .fact-state.missing, .fact-state.disputed { border-color: #9a5b12; color: #9a5b12; }
+.fact-src { padding: 0 6px; border-radius: 99px; font-size: 11px; letter-spacing: .04em; background: var(--hair-soft); color: var(--brown); text-transform: lowercase; }
+.fact-src.driver, .fact-src.customer, .fact-src.site, .fact-src.ferry { color: var(--ink); font-weight: 500; }
+.room-ask { display: grid; gap: 8px; margin: 0 0 18px; }
+.room-log { display: grid; gap: 10px; }
+.room-exchange { display: grid; gap: 6px; }
+.room-turn { margin: 0; max-width: 46rem; padding: 8px 10px; border-radius: 12px; font-size: 14px; }
+.room-turn.you { justify-self: end; background: var(--ink); color: var(--birch); }
+.room-turn.agent { background: var(--tray); }
+.room-ask input { width: 100%; }
 .room-rest { margin-top: 48px; }
 .room-rest h2 { font-family: var(--font-display); font-weight: 600; font-size: 18px; letter-spacing: -0.02em; }
 .room-support { margin-top: 48px; display: grid; gap: 20px; }
@@ -597,3 +611,8 @@ details.more > :not(summary) { margin-top: 8px; }
 .onboard-rules .icon { color: var(--green-ink); margin-top: 3px; flex: none; }
 .onboard-foot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .onboard-foot p { font-size: 12px; color: var(--subtle); }
+
+/* ── Fleet-at-a-glance counts (room header) ───────────────────────────── */
+.room-counts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 14px; border-radius: var(--radius); background: var(--tray); box-shadow: var(--shadow-card); font-size: 13px; color: var(--muted); }
+.room-counts b { color: var(--ink); }
+.room-counts span + span { padding-left: 18px; border-left: 1px solid var(--hair); }

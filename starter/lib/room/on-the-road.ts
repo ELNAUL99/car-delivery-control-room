@@ -35,6 +35,13 @@ export function isOpenVehicleWarning(bundle: Bundle): boolean {
   return rows(bundle, "incidents").some((row) => str(row.details.kind) === "VEHICLE_WARNING" && !str(row.details.resolved_at))
 }
 
+export function roadHalt(bundle: Bundle): string | null {
+  if (!isOpenVehicleWarning(bundle)) return null
+  const safe = bundle.messages.some((message) => message.authorType === "driver" && /\b(safe|stopped)\b/i.test(message.body))
+  if (!safe) return "Agent stopped. The driver has not confirmed a safe stop, so the model was not asked what to do with the car."
+  return null
+}
+
 export function knownRecordIds(slices: RoadSlices): Set<string> {
   const ids = new Set<string>()
   for (const message of slices.messages) if (typeof message.id === "string") ids.add(message.id)
@@ -172,8 +179,8 @@ function proposalSlice(bundle: Bundle, id: string, details: Record<string, unkno
   }
 }
 
-function fact(text: string, source: string, recordId: string, kind: CitedFact["kind"], at: string | null): CitedFact {
-  return { text, source, recordId, kind, at }
+function fact(text: string, source: string, recordId: string, kind: CitedFact["kind"], at: string | null, state?: CitedFact["state"]): CitedFact {
+  return { text, source, recordId, kind, at, state }
 }
 
 function messageById(slices: RoadSlices, id: string): Slice | null {
@@ -191,6 +198,7 @@ function quotedMessage(slices: RoadSlices, id: string): CitedFact | null {
     message.id,
     "message",
     typeof message.at === "string" ? message.at : null,
+    "reported",
   )
 }
 
@@ -259,6 +267,7 @@ export function cardFromSlices(slices: RoadSlices, source: OnTheRoadCard["source
       incident.id,
       "incident",
       str(incident.openedAt),
+      incident.locationVerified === true ? "reported" : "missing",
     ))
   }
 
@@ -274,6 +283,7 @@ export function cardFromSlices(slices: RoadSlices, source: OnTheRoadCard["source
       gap.id,
       "alert",
       str(gap.triggeredAt),
+      "stale",
     ))
   }
 
@@ -287,6 +297,7 @@ export function cardFromSlices(slices: RoadSlices, source: OnTheRoadCard["source
       promise.id,
       "window",
       str(promise.end),
+      "recorded",
     ))
   }
 
@@ -298,6 +309,7 @@ export function cardFromSlices(slices: RoadSlices, source: OnTheRoadCard["source
       photo.id,
       "document",
       null,
+      (photo.fileCount ?? 0) === 0 ? "missing" : "recorded",
     ))
   }
 
@@ -310,6 +322,7 @@ export function cardFromSlices(slices: RoadSlices, source: OnTheRoadCard["source
       proposal.id,
       "proposal",
       str(proposal.reviewedAt),
+      "recorded",
     ))
   }
   const work = slices.work
@@ -321,6 +334,7 @@ export function cardFromSlices(slices: RoadSlices, source: OnTheRoadCard["source
       work.id,
       "work",
       str(work.dueAt),
+      "recorded",
     ))
   }
 

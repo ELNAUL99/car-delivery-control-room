@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { recordDecision } from "@/lib/agent/session"
+import { effectFor } from "@/lib/room/effect"
 import { loadSupportThread, supportReplyProblem } from "@/lib/room/support"
 import type { SessionDecision } from "@/lib/room/types"
 
@@ -25,10 +26,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (problem) return NextResponse.json({ error: problem }, { status: 422 })
   }
 
-  const decision: SessionDecision = { orderId: id, actionId, choice, text, at: new Date().toISOString() }
+  const effect = effectFor(actionId, choice)
+  const decision: SessionDecision = { orderId: id, actionId, choice, text, at: new Date().toISOString(), effect }
   await recordDecision(decision)
-  const effect = choice === "rejected"
-    ? "Rejected. The thread stays open."
-    : "Approved. Nothing was sent, and the snapshot was not changed."
   return NextResponse.json({ decision, effect })
 }

@@ -37,9 +37,9 @@ export default async function DrivePage() {
         </ol>
         <p className="drive-waiting">His last line is still the open question. He will not move the car until someone tells him who is collecting it.</p>
         {phone.pending ? <aside className="drive-pending">
-          <p className="drive-who">Not on his phone yet · approved {fmtDateTime(phone.pending.at, phone.zone)}</p>
+          <p className="drive-who">Approved for the driver · {fmtDateTime(phone.pending.at, phone.zone)}</p>
           <p className="drive-body">{phone.pending.text}</p>
-          <p className="drive-time">The desk approved this text. Nothing was sent, and the snapshot was not changed.</p>
+          <p className="drive-time">Recorded in this room. The snapshot chat is unchanged, and no customer was contacted.</p>
         </aside> : <p className="drive-waiting">The desk has not approved a next message.</p>}
       </div>}
     </main>

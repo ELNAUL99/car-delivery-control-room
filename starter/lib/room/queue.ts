@@ -35,7 +35,7 @@ export function assembleRoom(
   cards: BoardCard[],
   deepCards: Map<string, { kind: CaseKindId; card: RoomCard }>,
   decisions: SessionDecision[],
-): Omit<import("./types").RoomPayload, "investigations" | "support"> {
+): Omit<import("./types").RoomPayload, "investigations" | "support" | "stats"> {
   const cases = cards
     .map((card) => {
       const deep = deepCards.get(card.id)

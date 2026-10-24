@@ -16,12 +16,19 @@ export const ACTION_IDS = ["ask-driver", "hold-promise", "owner-call"] as const
 
 export type CiteKind = "message" | "incident" | "alert" | "work" | "proposal" | "document" | "window" | "tracking" | "offer" | "reservation" | "inbox"
 
+export type FactState = "reported" | "quoted" | "stale" | "missing" | "recorded" | "disputed"
+
+export type AgentTurn = { at: string; text: string; reply?: string }
+
 export type CitedFact = {
   text: string
   source: string
   recordId: string
   kind: CiteKind
   at: string | null
+  /** Who the fact came from: driver, site, ferry, document, customer, operator, agent, app, system. */
+  src?: string
+  state?: FactState
 }
 
 export type RoomAction = {
@@ -76,6 +83,8 @@ export type SessionDecision = {
   choice: "approved" | "rejected" | "edited"
   text: string | null
   at: string
+  /** What happens next, in one line — recorded, never sent (set on decide). */
+  effect?: string
 }
 
 // Driver Support runs on the support inbox, not per order, so it carries its own
@@ -95,12 +104,25 @@ export type SupportCase = {
   card: RoomCard
 }
 
+// Fleet-wide counts, so the board reads as a triage over all 100 orders — not
+// just the ones on screen. Derived from the records, never stored.
+export type RoomStats = {
+  total: number
+  needing: number
+  quiet: number
+  openAlerts: number
+  ready: number
+  stopped: number
+  bahnWorking: number
+}
+
 export type RoomPayload = {
   snapshotAt: string | null
   heroes: RoomCase[]
   rest: RoomCase[]
   support: SupportCase[]
   decisions: SessionDecision[]
+  stats: RoomStats
   /** The latest saved agent look per order id or support thread id. */
   investigations: Record<string, Investigation>
 }
@@ -114,6 +136,10 @@ export type Investigation = {
   trace: AgentTrace[]
   refusedDraft: string | null
   lookedAt?: string
+  /** The sentence the agent says back, before it is stored on a turn. */
+  reply?: string | null
+  /** What the person asked, and what the agent answered, in order. */
+  turns?: AgentTurn[]
 }
 
 // --- Case-kind registry contract -----------------------------------------
@@ -137,8 +163,10 @@ export type CaseKind = {
   detect(bundle: Bundle): boolean
   /** The card read straight off the snapshot (no model). */
   buildCard(bundle: Bundle): RoomCard | null
-  /** The agent look: cheap reads, then one decision, under guardrails. */
-  investigate(bundle: Bundle): Promise<Investigation>
+  /** The agent look: cheap reads, then one decision, under guardrails. `note` is a follow-up from the person. */
+  investigate(bundle: Bundle, note?: string, history?: AgentTurn[]): Promise<Investigation>
+  /** When this is set, the model is not called. The card stays the records. */
+  halt(bundle: Bundle): string | null
   /** Action ids this card can carry. */
   actionIds: readonly string[]
   /** A problem string if this action's approved text is not allowed, else null. */

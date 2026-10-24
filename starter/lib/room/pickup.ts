@@ -8,7 +8,7 @@ import { type Bundle, bool, obj, rows, str } from "@/lib/present/bundle"
 import { label } from "@/lib/present/labels"
 import { EMPTY_PARAMETERS, fn, runAgent, textOf } from "@/lib/agent/run-agent"
 import { fact, placeLabel, primaryVehicle } from "./cite"
-import type { CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
+import type { AgentTurn, CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
 
 type Slice = Record<string, unknown>
 
@@ -16,6 +16,13 @@ export function isOpenPickupCase(bundle: Bundle): boolean {
   const incident = rows(bundle, "incidents").some((row) => str(row.details.kind) === "EMPTY_PICKUP" && !str(row.details.resolved_at))
   const alert = bundle.alerts.some((a) => (a.status === "OPEN" || a.status === "ACKNOWLEDGED") && a.signal === "EMPTY_PICKUP")
   return incident || alert
+}
+
+export function pickupHalt(bundle: Bundle): string | null {
+  if (!isOpenPickupCase(bundle)) return null
+  const primary = bundle.items.find((item) => item.role === "PRIMARY") ?? bundle.items[0] ?? null
+  if (!primary?.vehicle.vin) return "Agent stopped. No VIN is on the record, so the model was not asked to release a car."
+  return null
 }
 
 type PickupSlices = {
@@ -100,19 +107,19 @@ function cardFromSlices(slices: PickupSlices, source: RoomCard["source"] = "reco
     if (typeof m.id !== "string" || typeof m.body !== "string") continue
     const channel = typeof m.channel === "string" ? label(m.channel) : "Message"
     const visibility = m.visibility === "INTERNAL" ? "internal" : null
-    facts.push(fact(`${m.author}: “${m.body}”`, [channel, visibility].filter(Boolean).join(" · "), m.id, "message", typeof m.at === "string" ? m.at : null))
+    facts.push(fact(`${m.author}: “${m.body}”`, [channel, visibility].filter(Boolean).join(" · "), m.id, "message", typeof m.at === "string" ? m.at : null, "reported"))
   }
-  if (slices.vin) facts.push(fact(`Ordered vehicle is a ${slices.vehicle}, VIN ${slices.vin}${slices.registration ? `, reg ${slices.registration}` : ""}. Identity must match this, not a similar stock reference.`, "Vehicle", slices.orderId, "work", null))
-  if (slices.alert && typeof slices.alert.id === "string") facts.push(fact(`${label(String(slices.alert.signal))} is ${label(String(slices.alert.status))}. “${slices.alert.summary}”`, "Alert · pickup", slices.alert.id, "alert", str(slices.alert.triggeredAt)))
-  if (slices.incident && typeof slices.incident.id === "string") facts.push(fact(`${label(String(slices.incident.kind))} is ${label(String(slices.incident.status))}.`, `Incident${slices.incident.owner ? ` · ${slices.incident.owner}` : ""}`, slices.incident.id, "incident", str(slices.incident.openedAt)))
-  if (slices.endpoint && typeof slices.endpoint.id === "string") facts.push(fact(`Pickup access is ${label(String(slices.endpoint.accessStatus))}, contact ${label(String(slices.endpoint.contactStatus))}.${slices.endpoint.instruction ? ` “${slices.endpoint.instruction}”` : ""}`, "Pickup endpoint", slices.endpoint.id, "document", null))
+  if (slices.vin) facts.push(fact(`Ordered vehicle is a ${slices.vehicle}, VIN ${slices.vin}${slices.registration ? `, reg ${slices.registration}` : ""}. Identity must match this, not a similar stock reference.`, "Vehicle", slices.orderId, "work", null, "recorded"))
+  if (slices.alert && typeof slices.alert.id === "string") facts.push(fact(`${label(String(slices.alert.signal))} is ${label(String(slices.alert.status))}. “${slices.alert.summary}”`, "Alert · pickup", slices.alert.id, "alert", str(slices.alert.triggeredAt), "reported"))
+  if (slices.incident && typeof slices.incident.id === "string") facts.push(fact(`${label(String(slices.incident.kind))} is ${label(String(slices.incident.status))}.`, `Incident${slices.incident.owner ? ` · ${slices.incident.owner}` : ""}`, slices.incident.id, "incident", str(slices.incident.openedAt), "reported"))
+  if (slices.endpoint && typeof slices.endpoint.id === "string") facts.push(fact(`Pickup access is ${label(String(slices.endpoint.accessStatus))}, contact ${label(String(slices.endpoint.contactStatus))}.${slices.endpoint.instruction ? ` “${slices.endpoint.instruction}”` : ""}`, "Pickup endpoint", slices.endpoint.id, "document", null, slices.endpoint.accessStatus === "CONFIRMED" ? "recorded" : "missing"))
 
   const alreadyDone: CitedFact[] = []
   if (slices.proposal && typeof slices.proposal.id === "string") {
     const p = slices.proposal
     const payload = obj(p.payload)
     const holds = payload ? [bool(payload.do_not_mark_picked_up) ? "do not mark picked up" : null, bool(payload.hold_collection) ? "hold collection" : null].filter(Boolean).join(", ") : ""
-    alreadyDone.push(fact(`${label(String(p.command))}: “${p.summary}”. ${p.rationale ?? ""}${holds ? ` Proposed: ${holds}.` : ""}`, `Proposal · ${label(String(p.status))}`, String(p.id), "proposal", null))
+    alreadyDone.push(fact(`${label(String(p.command))}: “${p.summary}”. ${p.rationale ?? ""}${holds ? ` Proposed: ${holds}.` : ""}`, `Proposal · ${label(String(p.status))}`, String(p.id), "proposal", null, "recorded"))
   }
 
   const missing = [
@@ -175,7 +182,7 @@ Rules:
 - siteMessage is a message to the pickup site. Ask it to confirm the exact VIN before any handover. It must not release a car.
 - Cite only what you read. Do not invent a branch, a VIN, or a release location.`
 
-function spec(slices: PickupSlices) {
+function spec(slices: PickupSlices, note?: string, history?: AgentTurn[]) {
   const base = cardFromSlices(slices)
   const tools = [
     fn("read_identity", "The ordered vehicle, its VIN, and the pickup endpoint access/contact status.", EMPTY_PARAMETERS),
@@ -189,6 +196,7 @@ function spec(slices: PickupSlices) {
         siteMessage: { type: "string", description: "Message to the site: confirm the exact VIN before any handover; do not release a similar car." },
         customerScript: { type: "string", description: "What a person can say to the customer to confirm the release branch. Not a message you send." },
         holdNote: { type: "string", description: "Why collection stays on hold and the pickup is not marked." },
+        say: { type: "string", description: "One or two sentences back to the person. Refuse a customer contact. A site message waits for their approval." },
       },
       required: ["summary", "siteMessage", "customerScript", "holdNote"],
     }),
@@ -210,6 +218,8 @@ function spec(slices: PickupSlices) {
     knownIds,
     toolPayload: payload,
     base,
+    note,
+    history,
     validate(input: Record<string, unknown>): string | null {
       return siteMessageProblem(textOf(input.siteMessage)) ?? summaryProblem(textOf(input.summary))
     },
@@ -228,10 +238,10 @@ function spec(slices: PickupSlices) {
   }
 }
 
-async function investigate(bundle: Bundle): Promise<Investigation> {
+async function investigate(bundle: Bundle, note?: string, history?: AgentTurn[]): Promise<Investigation> {
   const slices = pickupSlices(bundle)
   if (!slices) throw new Error("This agent only handles an open empty-pickup case.")
-  return runAgent(spec(slices))
+  return runAgent(spec(slices, note, history))
 }
 
 export const pickupReadinessKind: CaseKind = {
@@ -242,6 +252,7 @@ export const pickupReadinessKind: CaseKind = {
   detect: isOpenPickupCase,
   buildCard: buildPickupCard,
   investigate,
+  halt: pickupHalt,
   actionIds: ["ask-site", "hold-collection", "customer-reconcile"],
   guardAction(actionId, text) {
     return actionId === "ask-site" ? siteMessageProblem(text ?? "") : null

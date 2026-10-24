@@ -3,10 +3,10 @@
 
 import { type Bundle, str } from "@/lib/present/bundle"
 import { label } from "@/lib/present/labels"
-import type { CitedFact } from "./types"
+import type { CitedFact, FactState } from "./types"
 
-export function fact(text: string, source: string, recordId: string, kind: CitedFact["kind"], at: string | null): CitedFact {
-  return { text, source, recordId, kind, at }
+export function fact(text: string, source: string, recordId: string, kind: CitedFact["kind"], at: string | null, state?: FactState): CitedFact {
+  return { text, source, recordId, kind, at, state }
 }
 
 /** Quote the order's messages oldest-first, each as a cited fact. */
@@ -24,6 +24,7 @@ export function messageFacts(bundle: Bundle, opts?: { channel?: string; limit?: 
       message.id,
       "message",
       message.authoredAt,
+      "reported",
     ))
   }
   return opts?.limit ? out.slice(-opts.limit) : out

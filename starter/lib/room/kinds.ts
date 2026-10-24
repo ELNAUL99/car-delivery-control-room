@@ -4,7 +4,7 @@
 import { investigateOrder } from "@/lib/agent/investigate"
 import { driverDraftProblem } from "@/lib/agent/guard"
 import type { Bundle } from "@/lib/present/bundle"
-import { buildOnTheRoadCard, isOpenVehicleWarning } from "./on-the-road"
+import { buildOnTheRoadCard, isOpenVehicleWarning, roadHalt } from "./on-the-road"
 import { driverTravelKind } from "./travel"
 import { pickupReadinessKind } from "./pickup"
 import { promiseGuardianKind } from "./promise"
@@ -19,6 +19,7 @@ const onTheRoadKind: CaseKind = {
   detect: isOpenVehicleWarning,
   buildCard: buildOnTheRoadCard,
   investigate: investigateOrder,
+  halt: roadHalt,
   actionIds: ["ask-driver", "hold-promise", "owner-call"],
   guardAction(actionId, text) {
     return actionId === "ask-driver" ? driverDraftProblem(text ?? "") : null

@@ -10,7 +10,7 @@ import { label } from "@/lib/present/labels"
 import { fmtDateTime, fmtMoney, fmtRange, relativeTo } from "@/lib/present/time"
 import { EMPTY_PARAMETERS, fn, runAgent, textOf } from "@/lib/agent/run-agent"
 import { fact, primaryVehicle } from "./cite"
-import type { CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
+import type { AgentTurn, CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
 
 type Slice = Record<string, unknown>
 
@@ -22,6 +22,16 @@ export function isOpenTravelCase(bundle: Bundle): boolean {
   const incident = rows(bundle, "incidents").some((row) => str(row.details.kind) === "TRAVEL_CAPACITY" && !str(row.details.resolved_at))
   const alert = bundle.alerts.some((a) => (a.status === "OPEN" || a.status === "ACKNOWLEDGED") && TRAVEL_SIGNAL.test(a.signal))
   return incident || alert
+}
+
+export function travelHalt(bundle: Bundle): string | null {
+  if (!isOpenTravelCase(bundle)) return null
+  const options = rows(bundle, "travel_options")
+  const reservations = rows(bundle, "travel_reservations")
+  if (options.length === 0 && reservations.length === 0) {
+    return "Agent stopped. There is no quote and no booking, so the model was not asked to invent a crossing."
+  }
+  return null
 }
 
 type TravelSlices = {
@@ -151,15 +161,19 @@ function cardFromSlices(slices: TravelSlices, source: RoomCard["source"] = "reco
     if (typeof m.id !== "string" || typeof m.body !== "string") continue
     const channel = typeof m.channel === "string" ? label(m.channel) : "Message"
     const visibility = m.visibility === "INTERNAL" ? "internal" : null
-    facts.push(fact(`${m.author}: “${m.body}”`, [channel, visibility].filter(Boolean).join(" · "), m.id, "message", typeof m.at === "string" ? m.at : null))
+    facts.push(fact(`${m.author}: “${m.body}”`, [channel, visibility].filter(Boolean).join(" · "), m.id, "message", typeof m.at === "string" ? m.at : null, "reported"))
   }
-  if (slices.alert) facts.push(fact(`${label(String(slices.alert.signal))} is ${label(String(slices.alert.status))}. “${slices.alert.summary}”`, "Alert · travel", String(slices.alert.id), "alert", str(slices.alert.triggeredAt)))
-  if (slices.incident) facts.push(fact(`${label(String(slices.incident.kind))} is ${label(String(slices.incident.status))}.`, `Incident${slices.incident.owner ? ` · ${slices.incident.owner}` : ""}`, String(slices.incident.id), "incident", str(slices.incident.openedAt)))
-  for (const option of slices.options) facts.push(fact(optionLine(option, slices.zone), "Travel option", String(option.id), "reservation", str(option.checked_at)))
-  for (const res of slices.reservations) facts.push(fact(reservationLine(res, slices.zone), "Travel reservation", String(res.id), "reservation", str(res.booked_at)))
+  if (slices.alert) facts.push(fact(`${label(String(slices.alert.signal))} is ${label(String(slices.alert.status))}. “${slices.alert.summary}”`, "Alert · travel", String(slices.alert.id), "alert", str(slices.alert.triggeredAt), "reported"))
+  if (slices.incident) facts.push(fact(`${label(String(slices.incident.kind))} is ${label(String(slices.incident.status))}.`, `Incident${slices.incident.owner ? ` · ${slices.incident.owner}` : ""}`, String(slices.incident.id), "incident", str(slices.incident.openedAt), "reported"))
+  for (const option of slices.options) facts.push(fact(optionLine(option, slices.zone), "Travel option", String(option.id), "reservation", str(option.checked_at), "quoted"))
+  for (const res of slices.reservations) {
+    const status = String(res.status ?? "")
+    const state = /QUOTE|FAILED|SOLD_OUT/.test(status) ? "quoted" : "recorded"
+    facts.push(fact(reservationLine(res, slices.zone), "Travel reservation", String(res.id), "reservation", str(res.booked_at), state))
+  }
   if (slices.promise && typeof slices.promise.id === "string") {
     const rel = relativeTo(str(slices.promise.end), slices.snapshotAt)
-    facts.push(fact(`Delivery promise ${fmtRange(str(slices.promise.start), str(slices.promise.end), str(slices.promise.zone))}, ${slices.promise.sourceLabel}.${rel ? ` It ends ${rel.text} at the snapshot.` : ""} It has not been replaced.`, "Time window", slices.promise.id, "window", str(slices.promise.end)))
+    facts.push(fact(`Delivery promise ${fmtRange(str(slices.promise.start), str(slices.promise.end), str(slices.promise.zone))}, ${slices.promise.sourceLabel}.${rel ? ` It ends ${rel.text} at the snapshot.` : ""} It has not been replaced.`, "Time window", slices.promise.id, "window", str(slices.promise.end), "recorded"))
   }
 
   const alreadyDone: CitedFact[] = []
@@ -167,7 +181,7 @@ function cardFromSlices(slices: TravelSlices, source: RoomCard["source"] = "reco
     if (typeof p.id !== "string") continue
     const exec = p.executionStatus ? ` Execution: ${label(String(p.executionStatus))}${p.executionError ? ` — “${p.executionError}”` : ""}.` : ""
     const review = p.reviewDecision ? ` ${p.reviewer ?? "A person"} ${label(String(p.reviewDecision)).toLowerCase()} it${p.reviewNote ? `: “${p.reviewNote}”` : ""}.` : ""
-    alreadyDone.push(fact(`${label(String(p.command))}: “${p.summary}”.${review}${exec}`, `Proposal · ${label(String(p.status))}`, p.id, "proposal", str(p.reviewedAt)))
+    alreadyDone.push(fact(`${label(String(p.command))}: “${p.summary}”.${review}${exec}`, `Proposal · ${label(String(p.status))}`, p.id, "proposal", str(p.reviewedAt), "recorded"))
   }
 
   const soldOut = slices.options.some((o) => str(o.status) === "SOLD_OUT")
@@ -245,7 +259,7 @@ Rules:
 - driverReply is a driver-chat message. It may say the overnight is sold out and the later sailing is only a quote, and ask the driver to hold pickup/start. It must not say the crossing is booked.
 - Cite only what you read. Do not invent a price, a sailing or a terminal.`
 
-function spec(slices: TravelSlices) {
+function spec(slices: TravelSlices, note?: string, history?: AgentTurn[]) {
   const base = cardFromSlices(slices)
   const tools = [
     fn("read_alert_and_incident", "The travel alert and the open travel-capacity incident.", EMPTY_PARAMETERS),
@@ -259,6 +273,7 @@ function spec(slices: TravelSlices) {
         driverReply: { type: "string", description: "Driver-chat text. Sold-out + quote-only + hold pickup. Must not say booked." },
         rebookProposal: { type: "string", description: "The booking to propose for approval: sailing, time, cutoff, price. A proposal, not a booking." },
         promiseNote: { type: "string", description: "Why the delivery promise stays until the customer approves a later date." },
+        say: { type: "string", description: "One or two sentences back to the person. Refuse a customer contact. A driver message waits for their approval. Do not book." },
       },
       required: ["summary", "driverReply", "rebookProposal", "promiseNote"],
     }),
@@ -284,6 +299,8 @@ function spec(slices: TravelSlices) {
     knownIds,
     toolPayload: payload,
     base,
+    note,
+    history,
     validate(input: Record<string, unknown>): string | null {
       return travelReplyProblem(textOf(input.driverReply)) ?? rebookProblem(textOf(input.rebookProposal)) ?? summaryProblem(textOf(input.summary))
     },
@@ -303,10 +320,10 @@ function spec(slices: TravelSlices) {
   }
 }
 
-async function investigate(bundle: Bundle): Promise<Investigation> {
+async function investigate(bundle: Bundle, note?: string, history?: AgentTurn[]): Promise<Investigation> {
   const slices = travelSlices(bundle)
   if (!slices) throw new Error("This agent only handles an open vehicle crossing case.")
-  return runAgent(spec(slices))
+  return runAgent(spec(slices, note, history))
 }
 
 export const driverTravelKind: CaseKind = {
@@ -317,6 +334,7 @@ export const driverTravelKind: CaseKind = {
   detect: isOpenTravelCase,
   buildCard: buildTravelCard,
   investigate,
+  halt: travelHalt,
   actionIds: ["reply-driver", "propose-rebook", "hold-promise"],
   guardAction(actionId, text) {
     if (actionId === "reply-driver") return travelReplyProblem(text ?? "")

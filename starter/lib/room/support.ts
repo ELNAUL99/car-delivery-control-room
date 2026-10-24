@@ -11,7 +11,7 @@ import { label } from "@/lib/present/labels"
 import { str } from "@/lib/present/bundle"
 import { EMPTY_PARAMETERS, fn, runAgent, textOf } from "@/lib/agent/run-agent"
 import { fact } from "./cite"
-import type { CitedFact, Investigation, RoomAction, RoomCard, SupportCase } from "./types"
+import type { AgentTurn, CitedFact, Investigation, RoomAction, RoomCard, SupportCase } from "./types"
 
 type Row = Record<string, unknown>
 type Msg = { id: string; author: string; at: string | null; body: string }
@@ -56,12 +56,12 @@ function buildCard(thread: { id: string; details: Row }, messages: Msg[], refs: 
   const linkedIds = Array.isArray(d.linked_order_ids) ? d.linked_order_ids.filter((x): x is string => typeof x === "string") : []
   const candidates = candidateIds.map((id) => ({ id, reference: refs.get(id) ?? id }))
   const linked = linkedIds.map((id) => ({ id, reference: refs.get(id) ?? id }))
-
-  const facts: CitedFact[] = messages.map((m) => fact(`${m.author}: “${m.body}”`, `Support · ${label(channel)}`, m.id, "inbox", m.at))
-  if (basis) facts.push(fact(basis, "Link basis", thread.id, "inbox", null))
-
   const impostor = linkState === "PENDING_IDENTITY"
   const ambiguous = linkState === "PENDING_MATCH"
+
+  const facts: CitedFact[] = messages.map((m) => fact(`${m.author}: “${m.body}”`, `Support · ${label(channel)}`, m.id, "inbox", m.at, "reported"))
+  if (basis) facts.push(fact(basis, "Link basis", thread.id, "inbox", null, impostor || ambiguous ? "disputed" : "recorded"))
+
   const refList = (linked.length ? linked : candidates).map((o) => o.reference).join(", ")
 
   const headline = impostor
@@ -162,7 +162,7 @@ Rules:
 - reply is the message to send. Keep it to what the rules allow.
 - Cite only what you read.`
 
-function spec(support: SupportCase) {
+function spec(support: SupportCase, note?: string, history?: AgentTurn[]) {
   const base = support.card
   const safeThread = {
     category: support.category, channel: support.channel, linkState: support.linkState, waitingOn: support.waitingOn,
@@ -178,6 +178,7 @@ function spec(support: SupportCase) {
         reply: { type: "string", description: "The message to send. For an unverified reference, reveal nothing and ask for a verified reference." },
         linkDecision: { type: "string", description: "Link one order, needs identity, or no order (unverified claim)." },
         escalate: { type: "string", description: "What a person should pick up, if anything, with the context." },
+        say: { type: "string", description: "One or two sentences back to the person at the desk. Not the message to the sender. Never offer to contact a customer." },
       },
       required: ["summary", "reply", "linkDecision", "escalate"],
     }),
@@ -191,6 +192,8 @@ function spec(support: SupportCase) {
     knownIds: support.card.facts.map((f) => f.recordId),
     toolPayload: (name: string): unknown => (name === "read_thread" ? safeThread : { error: "Unknown tool" }),
     base,
+    note,
+    history,
     validate(input: Record<string, unknown>): string | null {
       return supportReplyProblem(textOf(input.reply), support.linkState)
     },
@@ -209,6 +212,15 @@ function spec(support: SupportCase) {
   }
 }
 
-export async function investigateSupport(support: SupportCase): Promise<Investigation> {
-  return runAgent(spec(support))
+export async function investigateSupport(support: SupportCase, note?: string, history?: AgentTurn[]): Promise<Investigation> {
+  if (support.linkState === "PENDING_IDENTITY") {
+    return {
+      ok: false,
+      error: "Agent stopped. The sender is not verified, so the model was not shown another account's car, route, or driver.",
+      card: support.card,
+      trace: [{ tool: "stop", summary: "Unverified sender. The model was not called." }],
+      refusedDraft: null,
+    }
+  }
+  return runAgent(spec(support, note, history))
 }

@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Chip, More, When } from "@/app/components/ui"
 import { Icon } from "@/app/components/icons"
 import { fmtRange } from "@/lib/present/time"
-import type { ActionId, AgentTrace, CitedFact, Investigation, RoomCard, RoomCase, RoomPayload, SessionDecision, SupportCase } from "@/lib/room/types"
+import type { ActionId, AgentTrace, AgentTurn, CitedFact, Investigation, RoomCard, RoomCase, RoomPayload, SessionDecision, SupportCase } from "@/lib/room/types"
 
 const SECTIONS: Record<CitedFact["kind"], string> = {
   message: "conversations",
@@ -21,16 +21,25 @@ const SECTIONS: Record<CitedFact["kind"], string> = {
   inbox: "conversations",
 }
 
-type AgentState = { error: string; trace: AgentTrace[] | null; refused: string | null }
+type AgentState = { error: string; trace: AgentTrace[] | null; refused: string | null; turns: AgentTurn[] }
 
 function emptyAgent(): AgentState {
-  return { error: "", trace: null, refused: null }
+  return { error: "", trace: null, refused: null, turns: [] }
+}
+
+function agentState(result: Investigation & { error?: string }, previous: AgentState): AgentState {
+  return {
+    error: result.error ?? "",
+    trace: result.trace?.length ? result.trace : previous.trace,
+    refused: result.refusedDraft ?? null,
+    turns: result.turns ?? previous.turns,
+  }
 }
 
 function agentsFrom(initial: RoomPayload | null): Record<string, AgentState> {
   const map: Record<string, AgentState> = {}
   for (const [id, inv] of Object.entries(initial?.investigations ?? {})) {
-    map[id] = { error: inv.error ?? "", trace: inv.trace?.length ? inv.trace : null, refused: inv.refusedDraft ?? null }
+    map[id] = { error: inv.error ?? "", trace: inv.trace?.length ? inv.trace : null, refused: inv.refusedDraft ?? null, turns: inv.turns ?? [] }
   }
   return map
 }
@@ -55,6 +64,13 @@ export function RoomView({ initial, error }: { initial: RoomPayload | null; erro
           ? "Nothing in this snapshot is waiting on a person."
           : <>{needing} {needing === 1 ? "order needs" : "orders need"} a person. {heroes.length} {heroes.length === 1 ? "has" : "have"} a decision ready. Everything else stays on the board.</>}</p>
     </header>
+    {!error && initial?.stats && <div className="room-counts" aria-label="Fleet at a glance">
+      <span><b className="num">{initial.stats.quiet}</b> of {initial.stats.total} orders checked and quiet</span>
+      <span><b className="num">{initial.stats.openAlerts}</b> with an open alert</span>
+      <span><b className="num">{initial.stats.ready}</b> with a decision ready</span>
+      {initial.stats.stopped > 0 && <span><b className="num">{initial.stats.stopped}</b> where the agent stopped</span>}
+      {initial.stats.bahnWorking > 0 && <span>Bahn already owns <b className="num">{initial.stats.bahnWorking}</b> with a due time</span>}
+    </div>}
     {error && <p className="board-error" role="alert">{error}</p>}
     {heroes.map((item) => <Hero
       key={`${item.id}:${item.card?.source}:${item.card?.actions.map((action) => action.draft ?? "").join("\n")}`}
@@ -105,18 +121,22 @@ function SupportCard({ item, snapshotAt, decisions, agent, onDecided, onInvestig
   const [actionError, setActionError] = useState<Record<string, string>>({})
   const refs = (item.linked.length ? item.linked : item.candidates)
 
-  async function lookAgain() {
+  async function lookAgain(note?: string) {
     setPending("agent")
     try {
-      const response = await fetch(`/api/support/${item.threadId}/investigate`, { method: "POST" })
+      const response = await fetch(`/api/support/${item.threadId}/investigate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ note: note ?? "" }),
+      })
       const result = await response.json() as Investigation & { error?: string }
       if (!response.ok || !result.card) {
-        onInvestigated(card, { error: result.error ?? "The agent could not look.", trace: agent.trace, refused: agent.refused })
+        onInvestigated(card, { error: result.error ?? "The agent could not look.", trace: agent.trace, refused: agent.refused, turns: agent.turns })
         return
       }
-      onInvestigated(result.card, { error: result.error ?? "", trace: result.trace ?? [], refused: result.refusedDraft })
+      onInvestigated(result.card, agentState(result, agent))
     } catch {
-      onInvestigated(card, { error: "The agent could not look.", trace: agent.trace, refused: agent.refused })
+      onInvestigated(card, { error: "The agent could not look.", trace: agent.trace, refused: agent.refused, turns: agent.turns })
     } finally {
       setPending(null)
     }
@@ -159,13 +179,13 @@ function SupportCard({ item, snapshotAt, decisions, agent, onDecided, onInvestig
     <ul className="room-missing">{card.missing.map((itemText) => <li key={itemText}>{itemText}</li>)}</ul>
 
     <div className="room-toolbar">
-      <button type="button" className="room-btn" onClick={lookAgain} disabled={pending !== null}>
+      <button type="button" className="room-btn" onClick={() => lookAgain()} disabled={pending !== null}>
         {pending === "agent" ? "Looking…" : "Look again with the agent"}
       </button>
       {refs[0] && <Link className="room-textlink" href={`/orders/${refs[0].id}#conversations`}>Open the order</Link>}
       {card.source === "agent" && <span className="room-source">Agent drafted the reply. The thread below is the record.</span>}
     </div>
-    {agent.error && <p className="room-note" role="status">{agent.error}</p>}
+    {agent.error?.startsWith("Agent stopped") ? <p className="room-stopped" role="status">{agent.error}</p> : agent.error && <p className="room-note" role="status">{agent.error}</p>}
     {agent.refused && <p className="room-refused">This reply was refused before it could be approved: “{agent.refused}”</p>}
     {agent.trace && agent.trace.length > 0 && <More label="What the agent looked up">
       <ul className="room-trace">{agent.trace.map((step, index) => <li key={`${step.tool}-${index}`}><b>{step.tool}</b> {step.summary}</li>)}</ul>
@@ -183,7 +203,7 @@ function SupportCard({ item, snapshotAt, decisions, agent, onDecided, onInvestig
             <textarea className="room-draft" value={drafts[action.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [action.id]: event.target.value }))} />
           </label> : <p className="room-script">{action.draft}</p>)}
           {decision && <p className="room-effect">{choiceLabel(decision)} · <When at={decision.at} snapshotAt={snapshotAt} withZone={false} /></p>}
-          {effects[action.id] && <p className="room-effect">{effects[action.id]}</p>}
+          {(effects[action.id] || decision?.effect) && <p className={`room-exec${(effects[action.id] ?? decision?.effect ?? "").includes("contact the customer yourself") ? " customer" : ""}`}><b>What happens next</b> {effects[action.id] ?? decision?.effect}</p>}
           {actionError[action.id] && <p className="room-note" role="alert">{actionError[action.id]}</p>}
           <div className="room-buttons">
             <button type="button" className="room-btn primary" disabled={pending !== null} onClick={() => decide(action.id, "approved", action.sendable)}>
@@ -195,10 +215,11 @@ function SupportCard({ item, snapshotAt, decisions, agent, onDecided, onInvestig
       })}
       <p className="room-foot">Approving here does not send anything and does not change the snapshot.</p>
     </section>
+    <AskAgent pending={pending} turns={agent.turns} onAsk={(note) => lookAgain(note)} />
 
     <section className="room-block" aria-label="The thread">
       <h3>The thread</h3>
-      <ol className="room-facts">{card.facts.map((fact) => <li key={fact.recordId}><p>{fact.text}</p><p className="room-cite">{fact.at && <When at={fact.at} snapshotAt={snapshotAt} withZone={false} />}<span>{fact.source}</span></p></li>)}</ol>
+      <ol className="room-facts">{card.facts.map((fact) => <li key={fact.recordId}><p>{fact.text}</p><p className="room-cite">{fact.at && <When at={fact.at} snapshotAt={snapshotAt} withZone={false} />}<span className={`fact-src ${factSource(fact)}`}>{factSource(fact)}</span><span>{fact.source}</span>{fact.state && <span className={`fact-state ${fact.state}`}>{fact.state}</span>}</p></li>)}</ol>
     </section>
   </article>
 }
@@ -219,18 +240,22 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
   if (!card) return null
   const date = item.decisive
 
-  async function lookAgain() {
+  async function lookAgain(note?: string) {
     setPending("agent")
     try {
-      const response = await fetch(`/api/orders/${item.id}/investigate`, { method: "POST" })
+      const response = await fetch(`/api/orders/${item.id}/investigate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ note: note ?? "" }),
+      })
       const result = await response.json() as Investigation & { error?: string }
       if (!response.ok || !result.card) {
-        onInvestigated(card!, { error: result.error ?? "The agent could not look.", trace: agent.trace, refused: agent.refused })
+        onInvestigated(card!, { error: result.error ?? "The agent could not look.", trace: agent.trace, refused: agent.refused, turns: agent.turns })
         return
       }
-      onInvestigated(result.card, { error: result.error ?? "", trace: result.trace ?? [], refused: result.refusedDraft })
+      onInvestigated(result.card, agentState(result, agent))
     } catch {
-      onInvestigated(card!, { error: "The agent could not look.", trace: agent.trace, refused: agent.refused })
+      onInvestigated(card!, { error: "The agent could not look.", trace: agent.trace, refused: agent.refused, turns: agent.turns })
     } finally {
       setPending(null)
     }
@@ -275,14 +300,14 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
     <ul className="room-missing">{card.missing.map((itemText) => <li key={itemText}>{itemText}</li>)}</ul>
 
     <div className="room-toolbar">
-      <button type="button" className="room-btn" onClick={lookAgain} disabled={pending !== null}>
+      <button type="button" className="room-btn" onClick={() => lookAgain()} disabled={pending !== null}>
         {pending === "agent" ? "Looking…" : "Look again with the agent"}
       </button>
       <Link className="room-textlink" href={`/orders/${item.id}#attention`}>Open the order</Link>
       {card.kind === "on_the_road" && <Link className="room-textlink" href="/drive">What the driver sees</Link>}
       {card.source === "agent" && <span className="room-source">Agent rewrote the reading. The facts below are still the records.</span>}
     </div>
-    {agent.error && <p className="room-note" role="status">{agent.error}</p>}
+    {agent.error?.startsWith("Agent stopped") ? <p className="room-stopped" role="status">{agent.error}</p> : agent.error && <p className="room-note" role="status">{agent.error}</p>}
     {agent.refused && <p className="room-refused">This draft was refused before it could be approved: “{agent.refused}”</p>}
     {agent.trace && agent.trace.length > 0 && <More label="What the agent looked up">
       <ul className="room-trace">{agent.trace.map((step, index) => <li key={`${step.tool}-${index}`}><b>{step.tool}</b> {step.summary}</li>)}</ul>
@@ -300,7 +325,7 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
             <textarea className="room-draft" value={drafts[action.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [action.id]: event.target.value }))} />
           </label> : <p className="room-script">{action.draft}</p>)}
           {decision && <p className="room-effect">{choiceLabel(decision)} · <When at={decision.at} snapshotAt={snapshotAt} withZone={false} /></p>}
-          {effects[action.id] && <p className="room-effect">{effects[action.id]}</p>}
+          {(effects[action.id] || decision?.effect) && <p className={`room-exec${(effects[action.id] ?? decision?.effect ?? "").includes("contact the customer yourself") ? " customer" : ""}`}><b>What happens next</b> {effects[action.id] ?? decision?.effect}</p>}
           {actionError[action.id] && <p className="room-note" role="alert">{actionError[action.id]}</p>}
           <div className="room-buttons">
             <button type="button" className="room-btn primary" disabled={pending !== null} onClick={() => decide(action.id, "approved", action.sendable)}>
@@ -312,6 +337,7 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
       })}
       <p className="room-foot">The case stays open until the facts are in the record. Approving here does not send anything and does not change the snapshot.</p>
     </section>
+    <AskAgent pending={pending} turns={agent.turns} onAsk={(note) => lookAgain(note)} />
 
     <section className="room-block" aria-label="What the records say">
       <h3>What the records say</h3>
@@ -329,10 +355,30 @@ function FactRow({ fact, orderId, snapshotAt }: { fact: CitedFact; orderId: stri
     <p>{fact.text}</p>
     <p className="room-cite">
       {fact.at && <When at={fact.at} snapshotAt={snapshotAt} withZone={false} />}
+      <span className={`fact-src ${factSource(fact)}`}>{factSource(fact)}</span>
       <span>{fact.source}</span>
+      {fact.state && <span className={`fact-state ${fact.state}`}>{fact.state}</span>}
       <Link className="ref-link" href={`/orders/${orderId}#${SECTIONS[fact.kind]}`}>{fact.recordId}</Link>
     </p>
   </li>
+}
+
+function AskAgent({ pending, turns, onAsk }: { pending: string | null; turns: AgentTurn[]; onAsk: (note: string) => void }) {
+  const [note, setNote] = useState("")
+  return <form className="room-ask" onSubmit={(event) => { event.preventDefault(); const text = note.trim(); if (!text) return; setNote(""); onAsk(text) }}>
+    {(turns.length > 0 || pending === "agent") && <div className="room-log">
+      {turns.map((turn) => <div className="room-exchange" key={turn.at}>
+        <p className="room-turn you"><b>You</b> {turn.text}</p>
+        {turn.reply && <p className="room-turn agent"><b>Agent</b> {turn.reply}</p>}
+      </div>)}
+      {pending === "agent" && <p className="room-turn agent">Looking at the records…</p>}
+    </div>}
+    <label className="room-label">
+      <span>Talk to the agent</span>
+      <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ask the driver for the place, or ask the pickup site to match the VIN" />
+    </label>
+    <button type="submit" className="room-btn" disabled={pending !== null || note.trim().length === 0}>{pending === "agent" ? "Asking…" : "Send"}</button>
+  </form>
 }
 
 function QueueRow({ item }: { item: RoomCase }) {
@@ -355,4 +401,30 @@ function choiceLabel(decision: SessionDecision): string {
   if (decision.choice === "rejected") return "Not this"
   if (decision.choice === "edited") return "Edited, then approved"
   return "Approved"
+}
+
+// Who the fact came from, as a fixed taxonomy (OPERATIONS-CONTEXT: a quote is not
+// a booking, a driver message is not a fresh location). Uses the fact's own `src`
+// when set, else derives it from the kind and the source label — no area-module
+// change needed.
+function factSource(fact: CitedFact): string {
+  if (fact.src) return fact.src
+  const s = (fact.source ?? "").toLowerCase()
+  if (fact.kind === "message" || fact.kind === "inbox") {
+    if (s.includes("driver")) return "driver"
+    if (s.includes("customer")) return "customer"
+    if (s.includes("site")) return "site"
+    if (s.includes("support")) return "support"
+    if (s.includes("internal") || s.includes("case") || s.includes("note")) return "ops"
+    return "message"
+  }
+  if (fact.kind === "alert") return "system"
+  if (fact.kind === "tracking") return "app"
+  if (fact.kind === "reservation" || fact.kind === "offer") return "ferry"
+  if (fact.kind === "window") return "customer"
+  if (fact.kind === "document") return "document"
+  if (fact.kind === "incident") return "site"
+  if (fact.kind === "proposal") return "agent"
+  if (fact.kind === "work") return "ops"
+  return "record"
 }
