@@ -40,6 +40,30 @@ export type RoomAction = {
   sendable: boolean
 }
 
+// A crossing the agent found while researching a missed/at-risk ferry. Timetables
+// and prices are mocked (the brief allows this); feasibility is reasoned against
+// the driver's road time to the terminal and the check-in cutoff.
+export type CrossingOption = {
+  id: string
+  operator: string
+  from: string
+  to: string
+  departure: string
+  arrival: string
+  priceEur: number | null
+  slot: "available" | "quoted" | "sold_out"
+  checkInCutoff: string
+  roadHoursToTerminal: number | null
+  feasible: boolean
+  note: string
+}
+
+export type TravelResearch = {
+  crossings: CrossingOption[]
+  chosenId: string | null
+  reasoning: string
+}
+
 export type RoomCard = {
   /** Which deep area this card belongs to. */
   kind: CaseKindId
@@ -52,6 +76,8 @@ export type RoomCard = {
   facts: CitedFact[]
   alreadyDone: CitedFact[]
   actions: RoomAction[]
+  /** Driver Travel: the crossings the agent searched and compared. */
+  research?: TravelResearch
   /** "records" is the reading of the snapshot. "agent" means a model rewrote the summary or a draft, and the facts stayed cited. */
   source: "records" | "agent"
 }

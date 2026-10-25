@@ -9,8 +9,9 @@ import { type Bundle, bool, num, obj, rows, str } from "@/lib/present/bundle"
 import { label } from "@/lib/present/labels"
 import { fmtDateTime, fmtMoney, fmtRange, relativeTo } from "@/lib/present/time"
 import { EMPTY_PARAMETERS, fn, runAgent, textOf } from "@/lib/agent/run-agent"
+import { recommend, searchCrossings } from "@/lib/agent/ferry-search"
 import { fact, primaryVehicle } from "./cite"
-import type { AgentTurn, CaseKind, CitedFact, Investigation, RoomAction, RoomCard } from "./types"
+import type { AgentTurn, CaseKind, CitedFact, Investigation, RoomAction, RoomCard, TravelResearch } from "./types"
 
 type Slice = Record<string, unknown>
 
@@ -153,6 +154,24 @@ function actionsFor(slices: TravelSlices, drafts?: { driver?: string; rebook?: s
   ]
 }
 
+// The legwork: search alternative crossings and reason which the driver can make.
+function travelResearch(slices: TravelSlices): TravelResearch | undefined {
+  if (slices.options.length === 0) return undefined
+  const first = slices.options[0]
+  const crossings = searchCrossings({
+    snapshotAt: slices.snapshotAt,
+    from: str(first.from_city) ?? "the origin terminal",
+    to: str(first.to_city) ?? "the destination terminal",
+    operator: str(first.provider) ?? "the carrier",
+    roadHoursToTerminal: num(first.road_time_to_terminal_hours),
+    recorded: slices.options.map((o) => ({
+      departure: str(o.departure_at), arrival: str(o.arrival_at), priceCents: num(o.quote_cents),
+      status: str(o.status), checkInCutoff: str(o.check_in_cutoff_at),
+    })),
+  })
+  return recommend(crossings)
+}
+
 function cardFromSlices(slices: TravelSlices, source: RoomCard["source"] = "records", drafts?: { summary?: string; driver?: string; rebook?: string; promise?: string }): RoomCard {
   const facts: CitedFact[] = []
 
@@ -207,6 +226,7 @@ function cardFromSlices(slices: TravelSlices, source: RoomCard["source"] = "reco
     facts,
     alreadyDone,
     actions: actionsFor(slices, drafts),
+    research: travelResearch(slices),
     source,
   }
 }
@@ -257,6 +277,7 @@ Rules:
 - Do not book anything. rebookProposal is a booking you propose for a person to approve; it is not a booking.
 - Do not contact the customer. Do not state a new delivery date or ETA — the customer must approve a later date first.
 - driverReply is a driver-chat message. It may say the overnight is sold out and the later sailing is only a quote, and ask the driver to hold pickup/start. It must not say the crossing is booked.
+- Use search_crossings to find alternative sailings, then recommend in rebookProposal the earliest one with a vehicle slot the driver can still reach in time; compare price against how much later it arrives and what it does to the promise.
 - Cite only what you read. Do not invent a price, a sailing or a terminal.`
 
 function spec(slices: TravelSlices, note?: string, history?: AgentTurn[]) {
@@ -264,6 +285,7 @@ function spec(slices: TravelSlices, note?: string, history?: AgentTurn[]) {
   const tools = [
     fn("read_alert_and_incident", "The travel alert and the open travel-capacity incident.", EMPTY_PARAMETERS),
     fn("read_crossings", "Every crossing option (quoted/sold-out, price, cutoff) and any reservation with its boarding state.", EMPTY_PARAMETERS),
+    fn("search_crossings", "Search alternative vehicle crossings for this route (mocked timetables/prices) and get which the driver can still make within hours and check-in cutoffs.", EMPTY_PARAMETERS),
     fn("read_promise_and_messages", "The customer delivery promise and the order's messages.", EMPTY_PARAMETERS),
     fn("read_prior_proposals", "Earlier travel proposals, including the attempt that failed.", EMPTY_PARAMETERS),
     fn("submit_decision", "Submit the reading and the drafts. Call once, after the reads.", {
@@ -281,6 +303,7 @@ function spec(slices: TravelSlices, note?: string, history?: AgentTurn[]) {
   const payload = (name: string): unknown => {
     if (name === "read_alert_and_incident") return { alert: slices.alert, incident: slices.incident }
     if (name === "read_crossings") return { options: slices.options, reservations: slices.reservations }
+    if (name === "search_crossings") return { crossings: base.research?.crossings ?? [], recommended: base.research?.chosenId, reasoning: base.research?.reasoning }
     if (name === "read_promise_and_messages") return { promise: slices.promise, messages: slices.messages }
     if (name === "read_prior_proposals") return { proposals: slices.proposals }
     return { error: "Unknown tool" }
@@ -294,7 +317,7 @@ function spec(slices: TravelSlices, note?: string, history?: AgentTurn[]) {
     system: SYSTEM,
     task: `Order ${slices.orderId} (${slices.reference}). Read the alert, the crossings, the promise and the prior attempt, then submit_decision. Do not answer in prose.`,
     tools,
-    readTools: ["read_alert_and_incident", "read_crossings", "read_promise_and_messages", "read_prior_proposals"] as const,
+    readTools: ["read_alert_and_incident", "read_crossings", "search_crossings", "read_promise_and_messages", "read_prior_proposals"] as const,
     submitTool: "submit_decision",
     knownIds,
     toolPayload: payload,

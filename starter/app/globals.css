@@ -635,3 +635,18 @@ details.more > :not(summary) { margin-top: 8px; }
 .call-outcome { margin: 0; padding: 10px 14px; border-top: 1px solid var(--hair); font-size: 14px; }
 .call-outcome.ok { color: var(--green-ink); background: color-mix(in srgb, #2f6b4f 8%, transparent); }
 .call-outcome.no { color: var(--orange-ink); background: var(--orange-bg); }
+
+/* ── Driver Travel: crossings the agent found ─────────────────────────── */
+.crossings-wrap { margin-top: 12px; overflow-x: auto; border: 1px solid var(--hair); border-radius: var(--radius-lg); }
+.crossings-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.crossings-table th { text-align: left; padding: 8px 10px; background: var(--tray); color: var(--subtle); font-weight: 500; white-space: nowrap; }
+.crossings-table td { padding: 8px 10px; border-top: 1px solid var(--hair-soft); vertical-align: top; }
+.crossings-table tr.pick td { background: color-mix(in srgb, #2f6b4f 8%, transparent); }
+.crossings-table tr.out td { color: var(--subtle); }
+.crossings-tag { margin-left: 6px; font-size: 11px; color: var(--green-ink); background: var(--green-bg); padding: 1px 6px; border-radius: 99px; }
+.crossings-table .slot-available { color: var(--green-ink); }
+.crossings-table .slot-quoted { color: var(--orange-ink); }
+.crossings-table .slot-sold_out { color: var(--red-ink); }
+.crossings-table .feas-ok { color: var(--green-ink); }
+.crossings-table .feas-no { color: var(--red-ink); }
+.crossings-reason { margin-top: 10px; font-size: 14px; color: var(--brown); max-width: 74ch; }

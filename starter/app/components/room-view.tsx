@@ -4,8 +4,8 @@ import Link from "next/link"
 import { useState } from "react"
 import { Chip, More, When } from "@/app/components/ui"
 import { Icon } from "@/app/components/icons"
-import { fmtRange } from "@/lib/present/time"
-import type { ActionId, AgentTrace, AgentTurn, CitedFact, Investigation, PickupCall, RoomCard, RoomCase, RoomPayload, SessionDecision, SupportCase } from "@/lib/room/types"
+import { fmtDateTime, fmtRange } from "@/lib/present/time"
+import type { ActionId, AgentTrace, AgentTurn, CitedFact, Investigation, PickupCall, RoomCard, RoomCase, RoomPayload, SessionDecision, SupportCase, TravelResearch } from "@/lib/room/types"
 
 const SECTIONS: Record<CitedFact["kind"], string> = {
   message: "conversations",
@@ -313,6 +313,7 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
       <ul className="room-trace">{agent.trace.map((step, index) => <li key={`${step.tool}-${index}`}><b>{step.tool}</b> {step.summary}</li>)}</ul>
     </More>}
 
+    {card.kind === "driver_travel" && card.research && <CrossingsTable research={card.research} />}
     {card.kind === "pickup_readiness" && <PickupPhone orderId={item.id} />}
     <section className="room-block" aria-label="Decisions">
       <h3>{card.actions.length === 3 ? "Three decisions, each on its own" : "Decisions, each on its own"}</h3>
@@ -402,6 +403,26 @@ function choiceLabel(decision: SessionDecision): string {
   if (decision.choice === "rejected") return "Not this"
   if (decision.choice === "edited") return "Edited, then approved"
   return "Approved"
+}
+
+function CrossingsTable({ research }: { research: TravelResearch }) {
+  return <section className="room-block crossings" aria-label="Crossings the agent found">
+    <h3>Crossings the agent found</h3>
+    <div className="crossings-wrap">
+      <table className="crossings-table">
+        <thead><tr><th>Sailing</th><th>Depart</th><th>Arrive</th><th>Price</th><th>Slot</th><th>Can the driver make it?</th></tr></thead>
+        <tbody>{research.crossings.map((c) => <tr key={c.id} className={c.id === research.chosenId ? "pick" : c.slot === "sold_out" ? "out" : ""}>
+          <td>{c.operator}{c.id === research.chosenId && <span className="crossings-tag">recommended</span>}</td>
+          <td>{fmtDateTime(c.departure, null, false)}</td>
+          <td>{fmtDateTime(c.arrival, null, false)}</td>
+          <td>{c.priceEur != null ? `€${c.priceEur}` : "—"}</td>
+          <td className={`slot-${c.slot}`}>{c.slot.replace(/_/g, " ")}</td>
+          <td className={c.feasible ? "feas-ok" : "feas-no"}>{c.feasible ? "✓ " : "✗ "}{c.note}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+    <p className="crossings-reason">{research.reasoning}</p>
+  </section>
 }
 
 const WHO: Record<string, string> = { ivr: "Menu", agent: "Agent", desk: "Branch desk", system: "" }
