@@ -510,7 +510,9 @@ details.more > :not(summary) { margin-top: 8px; }
 .room-textlink { font-size: 13px; font-weight: 500; color: var(--brown); }
 .room-source, .room-note, .room-effect, .room-foot { font-size: 13px; color: var(--muted); max-width: 68ch; }
 .room-note { margin-top: 10px; color: var(--red-ink); }
-.room-refused { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); background: var(--orange-bg); color: var(--orange-ink); font-size: 13px; max-width: 68ch; }
+.room-refused { margin: 12px 0 0; padding: 8px 10px; border-left: 3px solid var(--red); background: var(--red-bg); color: var(--red-ink); font-size: 14px; max-width: 68ch; }
+.room-refusal { margin: 8px 0 0; padding: 8px 10px; border-left: 3px solid var(--red); background: var(--red-bg); color: var(--red-ink); font-size: 14px; }
+.room-refusal b { color: var(--red-ink); }
 .room-trace { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--brown); }
 .room-trace b { font-weight: 500; color: var(--ink); }
 .room-block { margin-top: 28px; }

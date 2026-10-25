@@ -204,7 +204,7 @@ function SupportCard({ item, snapshotAt, decisions, agent, onDecided, onInvestig
           </label> : <p className="room-script">{action.draft}</p>)}
           {decision && <p className="room-effect">{choiceLabel(decision)} · <When at={decision.at} snapshotAt={snapshotAt} withZone={false} /></p>}
           {(effects[action.id] || decision?.effect) && <p className={`room-exec${(effects[action.id] ?? decision?.effect ?? "").includes("contact the customer yourself") ? " customer" : ""}`}><b>What happens next</b> {effects[action.id] ?? decision?.effect}</p>}
-          {actionError[action.id] && <p className="room-note" role="alert">{actionError[action.id]}</p>}
+          {actionError[action.id] && <p className="room-refusal" role="alert"><b>Refused</b> {actionError[action.id]}</p>}
           <div className="room-buttons">
             <button type="button" className="room-btn primary" disabled={pending !== null} onClick={() => decide(action.id, "approved", action.sendable)}>
               {action.sendable ? "Approve this reply" : "Approve"}
@@ -327,7 +327,7 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
           </label> : <p className="room-script">{action.draft}</p>)}
           {decision && <p className="room-effect">{choiceLabel(decision)} · <When at={decision.at} snapshotAt={snapshotAt} withZone={false} /></p>}
           {(effects[action.id] || decision?.effect) && <p className={`room-exec${(effects[action.id] ?? decision?.effect ?? "").includes("contact the customer yourself") ? " customer" : ""}`}><b>What happens next</b> {effects[action.id] ?? decision?.effect}</p>}
-          {actionError[action.id] && <p className="room-note" role="alert">{actionError[action.id]}</p>}
+          {actionError[action.id] && <p className="room-refusal" role="alert"><b>Refused</b> {actionError[action.id]}</p>}
           <div className="room-buttons">
             <button type="button" className="room-btn primary" disabled={pending !== null} onClick={() => decide(action.id, "approved", action.sendable)}>
               {action.sendable ? "Approve this message" : "Approve"}
