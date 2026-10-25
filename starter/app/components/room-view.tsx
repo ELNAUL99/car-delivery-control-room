@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Chip, More, When } from "@/app/components/ui"
 import { Icon } from "@/app/components/icons"
 import { fmtRange } from "@/lib/present/time"
-import type { ActionId, AgentTrace, AgentTurn, CitedFact, Investigation, RoomCard, RoomCase, RoomPayload, SessionDecision, SupportCase } from "@/lib/room/types"
+import type { ActionId, AgentTrace, AgentTurn, CitedFact, Investigation, PickupCall, RoomCard, RoomCase, RoomPayload, SessionDecision, SupportCase } from "@/lib/room/types"
 
 const SECTIONS: Record<CitedFact["kind"], string> = {
   message: "conversations",
@@ -313,6 +313,7 @@ function Hero({ item, snapshotAt, decisions, agent, onDecided, onInvestigated }:
       <ul className="room-trace">{agent.trace.map((step, index) => <li key={`${step.tool}-${index}`}><b>{step.tool}</b> {step.summary}</li>)}</ul>
     </More>}
 
+    {card.kind === "pickup_readiness" && <PickupPhone orderId={item.id} />}
     <section className="room-block" aria-label="Decisions">
       <h3>{card.actions.length === 3 ? "Three decisions, each on its own" : "Decisions, each on its own"}</h3>
       {card.actions.map((action) => {
@@ -401,6 +402,40 @@ function choiceLabel(decision: SessionDecision): string {
   if (decision.choice === "rejected") return "Not this"
   if (decision.choice === "edited") return "Edited, then approved"
   return "Approved"
+}
+
+const WHO: Record<string, string> = { ivr: "Menu", agent: "Agent", desk: "Branch desk", system: "" }
+
+function PickupPhone({ orderId }: { orderId: string }) {
+  const [call, setCall] = useState<PickupCall | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function dial() {
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/orders/${orderId}/call`, { method: "POST" })
+      if (response.ok) setCall(await response.json() as PickupCall)
+    } catch {
+      /* leave call as-is */
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <section className="room-block pickup-phone" aria-label="Pickup readiness by phone">
+    <h3>Pickup readiness — by phone</h3>
+    <p className="room-note">The driver is at the pickup place. The agent can call the branch to confirm readiness. Calling to ask needs no approval, and the pickup place is fine to contact.</p>
+    <button type="button" className="room-btn" onClick={dial} disabled={busy}>
+      {busy ? "Calling…" : call ? "Call again" : "Call the pickup place"}
+    </button>
+    {call && <div className="call">
+      <ol className="call-log">{call.transcript.map((line, index) => <li key={index} className={`call-${line.who}`}>
+        {WHO[line.who] && <b>{WHO[line.who]}</b>} {line.text}
+      </li>)}</ol>
+      <ul className="call-check">{call.checklist.map((item) => <li key={item.label} className={item.ok ? "ok" : "no"}>
+        <span className="call-mark">{item.ok ? "✓" : "✗"}</span> <b>{item.label}</b> — {item.note}
+      </li>)}</ul>
+      <p className={`call-outcome ${call.ready ? "ok" : "no"}`}>{call.outcome} · {call.attempts} attempts ({call.reached ? "reached after a retry" : "no answer"})</p>
+    </div>}
+  </section>
 }
 
 // Who the fact came from, as a fixed taxonomy (OPERATIONS-CONTEXT: a quote is not

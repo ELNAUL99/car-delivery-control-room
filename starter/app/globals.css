@@ -616,3 +616,20 @@ details.more > :not(summary) { margin-top: 8px; }
 .room-counts { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 14px; border-radius: var(--radius); background: var(--tray); box-shadow: var(--shadow-card); font-size: 13px; color: var(--muted); }
 .room-counts b { color: var(--ink); }
 .room-counts span + span { padding-left: 18px; border-left: 1px solid var(--hair); }
+
+/* ── Pickup readiness, by phone (mock call) ───────────────────────────── */
+.pickup-phone .call { margin-top: 12px; border: 1px solid var(--hair); border-radius: var(--radius-lg); overflow: hidden; }
+.call-log { padding: 12px 14px; display: grid; gap: 8px; background: var(--tray); }
+.call-log li { font-size: 14px; color: var(--brown); }
+.call-log li b { color: var(--ink); margin-right: 4px; }
+.call-log .call-system { color: var(--subtle); font-style: italic; font-size: 13px; }
+.call-log .call-ivr { color: var(--teal-ink); }
+.call-check { padding: 12px 14px; display: grid; gap: 6px; border-top: 1px solid var(--hair); }
+.call-check li { font-size: 14px; color: var(--brown); }
+.call-check b { color: var(--ink); }
+.call-check .call-mark { font-weight: 700; }
+.call-check li.ok .call-mark { color: var(--green-ink); }
+.call-check li.no .call-mark { color: var(--red-ink); }
+.call-outcome { margin: 0; padding: 10px 14px; border-top: 1px solid var(--hair); font-size: 14px; }
+.call-outcome.ok { color: var(--green-ink); background: color-mix(in srgb, #2f6b4f 8%, transparent); }
+.call-outcome.no { color: var(--orange-ink); background: var(--orange-bg); }

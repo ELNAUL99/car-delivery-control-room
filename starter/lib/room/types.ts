@@ -127,6 +127,21 @@ export type RoomPayload = {
   investigations: Record<string, Investigation>
 }
 
+// A mocked readiness call to the pickup place. Asking needs no approval, and the
+// pickup place is fine to contact. The phone, the menu and the branch are mocked.
+export type CallLine = { who: "system" | "ivr" | "agent" | "desk"; text: string }
+export type ReadyItem = { label: string; ok: boolean; note: string }
+export type PickupCall = {
+  site: string
+  reference: string
+  attempts: number
+  reached: boolean
+  ready: boolean
+  transcript: CallLine[]
+  checklist: ReadyItem[]
+  outcome: string
+}
+
 export type AgentTrace = { tool: string; summary: string }
 
 export type Investigation = {
