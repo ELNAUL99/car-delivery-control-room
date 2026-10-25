@@ -3,6 +3,11 @@
 // any handover. The phone line, the menu and the branch answers are mocked (the
 // brief allows this); the questions follow the real readiness records. Calling to
 // ASK needs no approval, and the pickup place is fine to contact.
+//
+// LIVE CALL: the real Twilio integration that replaces this mock's transport
+// (while reusing its readiness logic, checklist and the VIN-match guard) is
+// written out, inert, in `lib/agent/phone-live.ts`. Activating it is install +
+// credentials + a from-number; the UI contract (PickupCall) stays identical.
 
 import type { CallLine, PickupCall, ReadyItem } from "@/lib/room/types"
 

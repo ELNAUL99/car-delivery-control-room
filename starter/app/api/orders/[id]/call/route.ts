@@ -19,6 +19,28 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   const primary = bundle.items.find((item) => item.role === "PRIMARY") ?? bundle.items[0] ?? null
   const place = bundle.places.get(bundle.order.pickupAddressId)
   const endpoint = rows(bundle, "order_endpoint_details").find((row) => str(row.details.boundary) === "PICKUP")
+
+  // --- LIVE TELEPHONY SEAM (inert; see lib/agent/phone-live.ts) --------------
+  // When Twilio credentials + a from-number are present AND the branch has a
+  // dialable E.164 number, place a real call and return { status:"dialing" }.
+  // With no credentials this whole block is skipped and we run the mock below,
+  // so the repo keeps working unchanged. Uncomment to activate the real call.
+  //
+  // import { liveTelephonyEnabled, pickProvider, resolveBranchNumber } from "@/lib/agent/telephony"
+  // const branch = place ? resolveBranchNumber(place.details) : null
+  // if (liveTelephonyEnabled() && branch) {
+  //   const started = await pickProvider().startPickupCall({
+  //     site: place ? (str(place.details.name) ?? place.name ?? `${place.city}`) : "the pickup place",
+  //     reference: bundle.order.reference,
+  //     vehicle: primary ? `${primary.vehicle.make} ${primary.vehicle.model}` : "the vehicle",
+  //     vin: primary?.vehicle.vin ?? null,
+  //     identityUnresolved: isOpenPickupCase(bundle),
+  //     accessNeedsVerify: endpoint ? str(endpoint.details.access_status) === "NEEDS_VERIFICATION" : false,
+  //   }, branch)
+  //   return NextResponse.json({ status: "dialing", callId: started.callId })
+  // }
+  // ---------------------------------------------------------------------------
+
   const call = runPickupCall({
     site: place ? (str(place.details.name) ?? place.name ?? `${place.city}`) : "the pickup place",
     reference: bundle.order.reference,
